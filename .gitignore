@@ -1,0 +1,11 @@
+#Sloverse Client .gitignore file.
+
+.vs/*
+!.vs/CMakeSettings.json
+
+out
+
+*.pdb
+
+.vscode/*
+!.vscode/c_cpp_properties.json
