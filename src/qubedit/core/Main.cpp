@@ -11,16 +11,48 @@
     BSD-style license that can be found in the LICENSE.txt file.
 */
 
+#include <nanogui/opengl.h>
+#include <nanogui/glutil.h>
 #include <nanogui/screen.h>
-#include <nanogui/layout.h>
 #include <nanogui/window.h>
+#include <nanogui/layout.h>
+#include <nanogui/label.h>
+#include <nanogui/checkbox.h>
 #include <nanogui/button.h>
-#include <nanogui/canvas.h>
-#include <nanogui/shader.h>
-#include <nanogui/renderpass.h>
-#include <enoki/transform.h>
-#include <GLFW/glfw3.h>
+#include <nanogui/toolbutton.h>
+#include <nanogui/popupbutton.h>
+#include <nanogui/combobox.h>
+#include <nanogui/progressbar.h>
+#include <nanogui/entypo.h>
+#include <nanogui/messagedialog.h>
+#include <nanogui/textbox.h>
+#include <nanogui/slider.h>
+#include <nanogui/imagepanel.h>
+#include <nanogui/imageview.h>
+#include <nanogui/vscrollpanel.h>
+#include <nanogui/colorwheel.h>
+#include <nanogui/graph.h>
+#include <nanogui/tabwidget.h>
+#include <nanogui/glcanvas.h>
+#include <iostream>
+#include <string>
 
+// Includes for the GLTexture class.
+#include <cstdint>
+#include <memory>
+#include <utility>
+
+#if defined(__GNUC__)
+#  pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+#endif
+#if defined(_WIN32)
+#  pragma warning(push)
+#  pragma warning(disable: 4457 4456 4005 4312)
+#endif
+
+#if defined(_WIN32)
+#  pragma warning(pop)
+#endif
 #if defined(_WIN32)
 #  if defined(APIENTRY)
 #    undef APIENTRY
@@ -28,237 +60,187 @@
 #  include <windows.h>
 #endif
 
-using nanogui::Vector3f;
-using nanogui::Vector2i;
-using nanogui::Shader;
-using nanogui::Canvas;
-using nanogui::ref;
-using enoki::EnokiType;
+using std::cout;
+using std::cerr;
+using std::endl;
+using std::string;
+using std::vector;
+using std::pair;
+using std::to_string;
 
-class MyCanvas : public Canvas {
+
+class MyGLCanvas : public nanogui::GLCanvas {
 public:
-    MyCanvas(Widget *parent) : Canvas(parent), m_rotation(0.f) {
+    MyGLCanvas(Widget* parent) : nanogui::GLCanvas(parent), mRotation(nanogui::Vector3f(0.25f, 0.5f, 0.33f)) {
         using namespace nanogui;
 
-        m_shader = new Shader(
-            render_pass(),
-
+        mShader.init(
             /* An identifying name */
             "a_simple_shader",
 
-#if defined(NANOGUI_USE_OPENGL)
             /* Vertex shader */
-            R"(#version 330
-            uniform mat4 mvp;
-            in vec3 position;
-            in vec3 color;
-            out vec4 frag_color;
-            void main() {
-                frag_color = vec4(color, 1.0);
-                gl_Position = mvp * vec4(position, 1.0);
-            })",
+            "#version 330\n"
+            "uniform mat4 modelViewProj;\n"
+            "in vec3 position;\n"
+            "in vec3 color;\n"
+            "out vec4 frag_color;\n"
+            "void main() {\n"
+            "    frag_color = 3.0 * modelViewProj * vec4(color, 1.0);\n"
+            "    gl_Position = modelViewProj * vec4(position, 1.0);\n"
+            "}",
 
             /* Fragment shader */
-            R"(#version 330
-            out vec4 color;
-            in vec4 frag_color;
-            void main() {
-                color = frag_color;
-            })"
-#elif defined(NANOGUI_USE_GLES)
-            /* Vertex shader */
-            R"(precision highp float;
-            uniform mat4 mvp;
-            attribute vec3 position;
-            attribute vec3 color;
-            varying vec4 frag_color;
-            void main() {
-                frag_color = vec4(color, 1.0);
-                gl_Position = mvp * vec4(position, 1.0);
-            })",
-
-            /* Fragment shader */
-            R"(precision highp float;
-            varying vec4 frag_color;
-            void main() {
-                gl_FragColor = frag_color;
-            })"
-#elif defined(NANOGUI_USE_METAL)
-            /* Vertex shader */
-            R"(using namespace metal;
-
-            struct VertexOut {
-                float4 position [[position]];
-                float4 color;
-            };
-
-            vertex VertexOut vertex_main(const device packed_float3 *position,
-                                         const device packed_float3 *color,
-                                         constant float4x4 &mvp,
-                                         uint id [[vertex_id]]) {
-                VertexOut vert;
-                vert.position = mvp * float4(position[id], 1.f);
-                vert.color = float4(color[id], 1.f);
-                return vert;
-            })",
-
-            /* Fragment shader */
-            R"(using namespace metal;
-
-            struct VertexOut {
-                float4 position [[position]];
-                float4 color;
-            };
-
-            fragment float4 fragment_main(VertexOut vert [[stage_in]]) {
-                return vert.color;
-            })"
-#endif
+            "#version 330\n"
+            "out vec4 color;\n"
+            "in vec4 frag_color;\n"
+            "void main() {\n"
+            "    color = frag_color;\n"
+            "}"
         );
 
-        uint32_t indices[3*12] = {
-            3, 2, 6, 6, 7, 3,
-            4, 5, 1, 1, 0, 4,
-            4, 0, 3, 3, 7, 4,
-            1, 5, 6, 6, 2, 1,
-            0, 1, 2, 2, 3, 0,
-            7, 6, 5, 5, 4, 7
-        };
+        MatrixXu indices(3, 12); /* Draw a cube */
+        indices.col(0) << 0, 1, 3;
+        indices.col(1) << 3, 2, 1;
+        indices.col(2) << 3, 2, 6;
+        indices.col(3) << 6, 7, 3;
+        indices.col(4) << 7, 6, 5;
+        indices.col(5) << 5, 4, 7;
+        indices.col(6) << 4, 5, 1;
+        indices.col(7) << 1, 0, 4;
+        indices.col(8) << 4, 0, 3;
+        indices.col(9) << 3, 7, 4;
+        indices.col(10) << 5, 6, 2;
+        indices.col(11) << 2, 1, 5;
 
-        float positions[3*8] = {
-            -1.f, 1.f, 1.f, -1.f, -1.f, 1.f,
-            1.f, -1.f, 1.f, 1.f, 1.f, 1.f,
-            -1.f, 1.f, -1.f, -1.f, -1.f, -1.f,
-            1.f, -1.f, -1.f, 1.f, 1.f, -1.f
-        };
+        MatrixXf positions(3, 8);
+        positions.col(0) << -1, 1, 1;
+        positions.col(1) << -1, 1, -1;
+        positions.col(2) << 1, 1, -1;
+        positions.col(3) << 1, 1, 1;
+        positions.col(4) << -1, -1, 1;
+        positions.col(5) << -1, -1, -1;
+        positions.col(6) << 1, -1, -1;
+        positions.col(7) << 1, -1, 1;
 
-        float colors[3*8] = {
-            0, 1, 1, 0, 0, 1,
-            1, 0, 1, 1, 1, 1,
-            0, 1, 0, 0, 0, 0,
-            1, 0, 0, 1, 1, 0
-        };
+        MatrixXf colors(3, 12);
+        colors.col(0) << 1, 0, 0;
+        colors.col(1) << 0, 1, 0;
+        colors.col(2) << 1, 1, 0;
+        colors.col(3) << 0, 0, 1;
+        colors.col(4) << 1, 0, 1;
+        colors.col(5) << 0, 1, 1;
+        colors.col(6) << 1, 1, 1;
+        colors.col(7) << 0.5, 0.5, 0.5;
+        colors.col(8) << 1, 0, 0.5;
+        colors.col(9) << 1, 0.5, 0;
+        colors.col(10) << 0.5, 1, 0;
+        colors.col(11) << 0.5, 1, 0.5;
 
-        m_shader->set_buffer("indices", EnokiType::UInt32, 1, {3*12, 1, 1}, indices);
-        m_shader->set_buffer("position", EnokiType::Float32, 2, {8, 3, 1}, positions);
-        m_shader->set_buffer("color", EnokiType::Float32, 2, {8, 3, 1}, colors);
+        mShader.bind();
+        mShader.uploadIndices(indices);
+
+        mShader.uploadAttrib("position", positions);
+        mShader.uploadAttrib("color", colors);
     }
 
-    void set_rotation(float rotation) {
-        m_rotation = rotation;
+    ~MyGLCanvas() {
+        mShader.free();
     }
 
-    virtual void draw_contents() override {
+    void setRotation(nanogui::Vector3f vRotation) {
+        mRotation = vRotation;
+    }
+
+    virtual void drawGL() override {
         using namespace nanogui;
 
-        using Matrix4f = enoki::Matrix<float, 4>;
+        mShader.bind();
 
-        Matrix4f view = enoki::look_at<Matrix4f>(
-            Vector3f(0, -2, -10),
-            Vector3f(0, 0, 0),
-            Vector3f(0, 1, 0)
-        );
+        Matrix4f mvp;
+        mvp.setIdentity();
+        float fTime = (float)glfwGetTime();
+        mvp.topLeftCorner<3, 3>() = Eigen::Matrix3f(Eigen::AngleAxisf(mRotation[0] * fTime, Vector3f::UnitX()) *
+            Eigen::AngleAxisf(mRotation[1] * fTime, Vector3f::UnitY()) *
+            Eigen::AngleAxisf(mRotation[2] * fTime, Vector3f::UnitZ())) * 0.25f;
 
-        Matrix4f model = enoki::rotate<Matrix4f>(
-            Vector3f(0, 1, 0),
-            (float) glfwGetTime()
-        );
+        mShader.setUniform("modelViewProj", mvp);
 
-        Matrix4f model2 = enoki::rotate<Matrix4f>(
-            Vector3f(1, 0, 0),
-            m_rotation
-        );
-
-        Matrix4f proj = enoki::perspective<Matrix4f>(
-            float(25 * M_PI / 180),
-            0.1f,
-            20.f,
-            m_size.x() / (float) m_size.y()
-        );
-
-        Matrix4f mvp = proj * view * model * model2;
-
-        m_shader->set_uniform("mvp", mvp);
-
+        glEnable(GL_DEPTH_TEST);
         /* Draw 12 triangles starting at index 0 */
-        m_shader->begin();
-        m_shader->draw_array(Shader::PrimitiveType::Triangle, 0, 12*3, true);
-        m_shader->end();
+        mShader.drawIndexed(GL_TRIANGLES, 0, 12);
+        glDisable(GL_DEPTH_TEST);
     }
 
 private:
-    ref<Shader> m_shader;
-    float m_rotation;
+    nanogui::GLShader mShader;
+    Eigen::Vector3f mRotation;
 };
+
 
 class ExampleApplication : public nanogui::Screen {
 public:
-    ExampleApplication() : nanogui::Screen(Vector2i(800, 600), "NanoGUI Test", false) {
+    ExampleApplication() : nanogui::Screen(Eigen::Vector2i(800, 600), "NanoGUI Test", false) {
         using namespace nanogui;
 
-        Window *window = new Window(this, "Canvas widget demo");
-        window->set_position(Vector2i(15, 15));
-        window->set_layout(new GroupLayout());
+        Window* window = new Window(this, "GLCanvas Demo");
+        window->setPosition(Vector2i(15, 15));
+        window->setLayout(new GroupLayout());
 
-        m_canvas = new MyCanvas(window);
-        m_canvas->set_background_color({100, 100, 100, 255});
-        m_canvas->set_fixed_size({400, 400});
+        mCanvas = new MyGLCanvas(window);
+        mCanvas->setBackgroundColor({ 100, 100, 100, 255 });
+        mCanvas->setSize({ 400, 400 });
 
-        Widget *tools = new Widget(window);
-        tools->set_layout(new BoxLayout(Orientation::Horizontal,
-                                       Alignment::Middle, 0, 5));
+        Widget* tools = new Widget(window);
+        tools->setLayout(new BoxLayout(Orientation::Horizontal,
+            Alignment::Middle, 0, 5));
 
-        Button *b0 = new Button(tools, "Random Color");
-        b0->set_callback([this]() {
-            m_canvas->set_background_color(
-                Vector4i(rand() % 256, rand() % 256, rand() % 256, 255));
-        });
+        Button* b0 = new Button(tools, "Random Color");
+        b0->setCallback([this]() { mCanvas->setBackgroundColor(Vector4i(rand() % 256, rand() % 256, rand() % 256, 255)); });
 
-        Button *b1 = new Button(tools, "Random Rotation");
-        b1->set_callback([this]() {
-            m_canvas->set_rotation((float) M_PI * rand() / (float) RAND_MAX);
-        });
+        Button* b1 = new Button(tools, "Random Rotation");
+        b1->setCallback([this]() { mCanvas->setRotation(nanogui::Vector3f((rand() % 100) / 100.0f, (rand() % 100) / 100.0f, (rand() % 100) / 100.0f)); });
 
-        perform_layout();
+        performLayout();
     }
 
-    virtual bool keyboard_event(int key, int scancode, int action, int modifiers) {
-        if (Screen::keyboard_event(key, scancode, action, modifiers))
+    virtual bool keyboardEvent(int key, int scancode, int action, int modifiers) {
+        if (Screen::keyboardEvent(key, scancode, action, modifiers))
             return true;
         if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
-            set_visible(false);
+            setVisible(false);
             return true;
         }
         return false;
     }
 
-    virtual void draw(NVGcontext *ctx) {
+    virtual void draw(NVGcontext* ctx) {
         /* Draw the user interface */
         Screen::draw(ctx);
     }
 private:
-    MyCanvas *m_canvas;
+    MyGLCanvas* mCanvas;
 };
 
-int main(int /* argc */, char ** /* argv */) {
+int main(int /* argc */, char** /* argv */) {
     try {
         nanogui::init();
 
         /* scoped variables */ {
             nanogui::ref<ExampleApplication> app = new ExampleApplication();
-            app->draw_all();
-            app->set_visible(true);
-            nanogui::mainloop(1 / 60.f * 1000);
+            app->drawAll();
+            app->setVisible(true);
+            nanogui::mainloop();
         }
 
         nanogui::shutdown();
-    } catch (const std::runtime_error &e) {
+    }
+    catch (const std::runtime_error & e) {
         std::string error_msg = std::string("Caught a fatal error: ") + std::string(e.what());
-        #if defined(_WIN32)
-            MessageBoxA(nullptr, error_msg.c_str(), NULL, MB_ICONERROR | MB_OK);
-        #else
-            std::cerr << error_msg << std::endl;
-        #endif
+#if defined(_WIN32)
+        MessageBoxA(nullptr, error_msg.c_str(), NULL, MB_ICONERROR | MB_OK);
+#else
+        std::cerr << error_msg << endl;
+#endif
         return -1;
     }
 

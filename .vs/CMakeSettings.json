@@ -8,14 +8,9 @@
       "configurationType": "Debug",
       "variables": [
         {
-          "name": "VCPKG_TARGET_TRIPLET",
-          "value": "x64-windows",
-          "type": "STRING"
-        },
-        {
           "name": "CMAKE_TOOLCHAIN_FILE",
-          "value": "C:\\vcpkg\\scripts\\buildsystems\\vcpkg.cmake",
-          "type": "STRING"
+          "value": "",
+          "type": "FILEPATH"
         }
       ]
     }
