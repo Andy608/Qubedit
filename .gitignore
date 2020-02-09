@@ -9,3 +9,9 @@ out
 
 .vscode/*
 !.vscode/c_cpp_properties.json
+
+.idea/*
+Cmake-build-debug/*
+Xcode/*
+
+.DS_Store
