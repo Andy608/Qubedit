@@ -15,6 +15,8 @@ include_directories(${QUBEENGINE_EXTRA_INCS}) # where glm, spdlog, etc come from
 
 set(QUBEDIT_SRC ${CMAKE_CURRENT_SOURCE_DIR}/src/qubedit)
 
+add_definitions(${QUBEENGINE_EXTRA_DEFS})
+
 add_executable(Qubedit ${QUBEDIT_SRC}/core/Main.cpp)
 
 # Lastly, additional libraries may have been built for you.  In addition to linking
@@ -22,3 +24,5 @@ add_executable(Qubedit ${QUBEDIT_SRC}/core/Main.cpp)
 target_link_libraries(Qubedit ${QUBEENGINE_EXTRA_LIBS})
 
 target_include_directories(Qubedit PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
+message(STATUS "Nano using: ${QUBEENGINE_EXTRA_DEFS}")
